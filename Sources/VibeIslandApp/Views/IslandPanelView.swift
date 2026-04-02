@@ -1,79 +1,228 @@
 import SwiftUI
 import VibeIslandCore
 
+// MARK: - Animations
+
+private let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
+private let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
+private let popAnimation = Animation.spring(response: 0.3, dampingFraction: 0.5)
+
+// MARK: - Main island view
+
 struct IslandPanelView: View {
     var model: AppModel
 
+    @Namespace private var notchNamespace
+
+    private var isOpened: Bool {
+        model.notchStatus == .opened
+    }
+
+    private var isPopping: Bool {
+        model.notchStatus == .popping
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("LIVE SESSIONS")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("\(model.surfacedSessions.count) live · \(model.state.attentionCount) attention")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+        GeometryReader { geometry in
+            let screenWidth = geometry.size.width
+            let screenHeight = geometry.size.height
+
+            ZStack(alignment: .top) {
+                Color.clear
+
+                notchContent(screenWidth: screenWidth)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.top, 0)
             }
+            .frame(width: screenWidth, height: screenHeight)
+        }
+        .onChange(of: model.notchStatus) { oldValue, newValue in
+            // Status changes are animated by the withAnimation calls in the model
+        }
+    }
 
-            if model.surfacedSessions.isEmpty {
-                Text("Waiting for Codex sessions.")
-                    .foregroundStyle(.secondary)
+    @ViewBuilder
+    private func notchContent(screenWidth: CGFloat) -> some View {
+        let notchWidth = closedNotchWidth
+        let openedWidth = min(screenWidth * 0.4, 480)
+        let openedHeight: CGFloat = 400
+
+        let currentWidth = isOpened ? openedWidth : (isPopping ? notchWidth + 32 : notchWidth)
+        let currentHeight = isOpened ? openedHeight : closedNotchHeight
+
+        VStack(spacing: 0) {
+            if isOpened {
+                openedHeaderRow(width: openedWidth)
+                    .padding(.top, 8)
+                    .padding(.horizontal, 16)
+
+                openedContent
+                    .transition(
+                        .asymmetric(
+                            insertion: .scale(scale: 0.8, anchor: .top).combined(with: .opacity),
+                            removal: .opacity
+                        )
+                    )
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(model.surfacedSessions) { session in
-                            IslandSessionRow(
-                                session: session,
-                                isSelected: session.id == model.focusedSession?.id,
-                                onSelect: { model.select(sessionID: session.id) },
-                                onJump: { model.jumpToSession(session) },
-                                onApprove: { approved in
-                                    model.approvePermission(for: session.id, approved: approved)
-                                },
-                                onAnswer: { answer in
-                                    model.answerQuestion(for: session.id, answer: answer)
-                                }
-                            )
-                        }
-                    }
-                }
-                .scrollIndicators(.visible)
-
-                if model.recentSessionCount > 0 {
-                    Text("\(model.recentSessionCount) older session(s) moved to history. Open Control Center to inspect them.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                closedContent
             }
         }
-        .padding(18)
-        .frame(
-            width: OverlayDisplayResolver.defaultPanelSize.width,
-            height: OverlayDisplayResolver.defaultPanelSize.height,
-            alignment: .topLeading
+        .frame(width: currentWidth, height: currentHeight)
+        .background(Color.black)
+        .clipShape(
+            NotchShape(
+                topCornerRadius: isOpened ? NotchShape.openedTopRadius : NotchShape.closedTopRadius,
+                bottomCornerRadius: isOpened ? NotchShape.openedBottomRadius : NotchShape.closedBottomRadius
+            )
         )
-        .background(panelBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(.white.opacity(0.08))
-        )
+        .shadow(color: .black.opacity(isOpened ? 0.7 : 0), radius: isOpened ? 6 : 0)
+        .animation(isOpened ? openAnimation : closeAnimation, value: model.notchStatus)
     }
 
-    private var panelBackground: some View {
-        RoundedRectangle(cornerRadius: 26, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.92),
-                        Color(red: 0.11, green: 0.13, blue: 0.18).opacity(0.96),
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+    // MARK: - Closed state
+
+    private var closedNotchWidth: CGFloat { 224 }
+    private var closedNotchHeight: CGFloat { 38 }
+
+    private var closedContent: some View {
+        HStack(spacing: 8) {
+            if let session = model.focusedSession {
+                closedSessionIndicator(session: session)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 12)
+    }
+
+    @ViewBuilder
+    private func closedSessionIndicator(session: AgentSession) -> some View {
+        HStack(spacing: 6) {
+            // Left: status dot
+            Circle()
+                .fill(phaseColor(session.phase))
+                .frame(width: 6, height: 6)
+
+            Spacer()
+
+            // Center: phase text
+            if session.phase.requiresAttention {
+                Text(session.phase == .waitingForApproval ? "Approval" : "Question")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+
+            Spacer()
+
+            // Right: activity indicator
+            if session.phase == .running {
+                SpinnerView()
+            } else if session.phase.requiresAttention {
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(phaseColor(session.phase))
+            }
+        }
+    }
+
+    // MARK: - Opened state
+
+    private func openedHeaderRow(width: CGFloat) -> some View {
+        HStack {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.mint)
+                    .frame(width: 8, height: 8)
+
+                Text("Vibe Island")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+
+            Spacer()
+
+            HStack(spacing: 12) {
+                Text("\(model.state.runningCount) live")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+
+                if model.state.attentionCount > 0 {
+                    Text("\(model.state.attentionCount) attention")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.orange.opacity(0.9))
+                }
+
+                Button {
+                    model.notchClose()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 20, height: 20)
+                        .background(.white.opacity(0.08), in: Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var openedContent: some View {
+        VStack(spacing: 0) {
+            if model.surfacedSessions.isEmpty {
+                emptyState
+            } else {
+                sessionList
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Text("No active sessions")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.4))
+            Text("Start Codex in your terminal")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.25))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var sessionList: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(model.surfacedSessions) { session in
+                    IslandSessionRow(
+                        session: session,
+                        isSelected: session.id == model.focusedSession?.id,
+                        onSelect: { model.select(sessionID: session.id) },
+                        onJump: { model.jumpToSession(session) },
+                        onApprove: { model.approvePermission(for: session.id, approved: $0) },
+                        onAnswer: { model.answerQuestion(for: session.id, answer: $0) }
+                    )
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    // MARK: - Helpers
+
+    private func phaseColor(_ phase: SessionPhase) -> Color {
+        switch phase {
+        case .running: .mint
+        case .waitingForApproval: .orange
+        case .waitingForAnswer: .yellow
+        case .completed: .blue
+        }
     }
 }
+
+// MARK: - Session row (opened state)
 
 private struct IslandSessionRow: View {
     let session: AgentSession
@@ -84,131 +233,150 @@ private struct IslandSessionRow: View {
     let onAnswer: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Button(action: onSelect) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(spacing: 10) {
                     Circle()
                         .fill(statusColor)
-                        .frame(width: 10, height: 10)
-                        .padding(.top, 6)
+                        .frame(width: 8, height: 8)
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(session.title)
-                            .font(.headline)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
 
                         Text(session.spotlightPrimaryText)
-                            .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.78))
-                            .lineLimit(2)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .lineLimit(1)
                     }
 
-                    Spacer(minLength: 12)
+                    Spacer(minLength: 8)
 
-                    VStack(alignment: .trailing, spacing: 8) {
-                        HStack(spacing: 8) {
-                            badge(session.tool.displayName, tint: .white.opacity(0.12))
-                            if let terminalBadge = session.spotlightTerminalBadge {
-                                badge(terminalBadge, tint: .white.opacity(0.10))
-                            }
-                            badge(session.spotlightStatusLabel, tint: statusColor.opacity(0.22))
+                    HStack(spacing: 6) {
+                        if let tool = session.spotlightCurrentToolLabel {
+                            compactBadge(tool)
                         }
-
-                        Text(session.updatedAt, style: .relative)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        compactBadge(session.spotlightStatusLabel)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
 
             if isSelected {
-                selectedActionRow
+                actionRow
             }
         }
-        .padding(14)
+        .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(isSelected ? Color.white.opacity(0.10) : Color.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isSelected ? Color.white.opacity(0.10) : Color.white.opacity(0.04))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(isSelected ? .white.opacity(0.16) : .white.opacity(0.06))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(isSelected ? .white.opacity(0.12) : .clear)
         )
     }
 
     @ViewBuilder
-    private var selectedActionRow: some View {
+    private var actionRow: some View {
         if let request = session.permissionRequest {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Text(request.summary)
-                    .font(.caption)
-                    .foregroundStyle(.orange.opacity(0.92))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange.opacity(0.9))
                     .lineLimit(2)
-                Spacer(minLength: 12)
-                Button(request.secondaryActionTitle) {
-                    onApprove(false)
-                }
-                .buttonStyle(.bordered)
-                Button(request.primaryActionTitle) {
-                    onApprove(true)
-                }
-                .buttonStyle(.borderedProminent)
+                Spacer(minLength: 8)
+                Button(request.secondaryActionTitle) { onApprove(false) }
+                    .buttonStyle(IslandCompactButtonStyle(tint: .secondary))
+                Button(request.primaryActionTitle) { onApprove(true) }
+                    .buttonStyle(IslandCompactButtonStyle(tint: .orange))
             }
         } else if let prompt = session.questionPrompt {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Text(prompt.title)
-                    .font(.caption)
-                    .foregroundStyle(.yellow.opacity(0.92))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.yellow.opacity(0.9))
                     .lineLimit(2)
-                Spacer(minLength: 12)
+                Spacer(minLength: 8)
                 ForEach(prompt.options.prefix(2), id: \.self) { option in
-                    Button(option) {
-                        onAnswer(option)
-                    }
-                    .buttonStyle(.bordered)
+                    Button(option) { onAnswer(option) }
+                        .buttonStyle(IslandCompactButtonStyle(tint: .secondary))
                 }
             }
         } else {
             HStack {
-                Text(session.phase == .completed
-                    ? "Idle in terminal. Jump back when needed."
-                    : "Live in terminal. Keep flow here and jump back when needed.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 12)
-                Button("Jump") {
-                    onJump()
+                if let tool = session.spotlightCurrentToolLabel {
+                    Text("Running \(tool)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(session.jumpTarget == nil)
+                Spacer(minLength: 8)
+                Button("Jump") { onJump() }
+                    .buttonStyle(IslandCompactButtonStyle(tint: .mint))
+                    .disabled(session.jumpTarget == nil)
             }
         }
     }
 
-    private func badge(_ title: String, tint: Color) -> some View {
+    private func compactBadge(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(tint, in: Capsule())
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(.white.opacity(0.5))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.white.opacity(0.06), in: Capsule())
     }
 
     private var statusColor: Color {
         switch session.phase {
-        case .running:
-            return .mint
-        case .waitingForApproval:
-            return .orange
-        case .waitingForAnswer:
-            return .yellow
-        case .completed:
-            return session.jumpTarget != nil ? .white : .blue
+        case .running: .mint
+        case .waitingForApproval: .orange
+        case .waitingForAnswer: .yellow
+        case .completed: session.jumpTarget != nil ? .white.opacity(0.5) : .blue
         }
     }
 }
+
+// MARK: - Compact button style
+
+private struct IslandCompactButtonStyle: ButtonStyle {
+    var tint: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(tint == .secondary ? .white.opacity(0.7) : tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                (tint == .secondary ? Color.white.opacity(0.08) : tint.opacity(0.15)),
+                in: Capsule()
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+// MARK: - Spinner
+
+private struct SpinnerView: View {
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        Image(systemName: "arrow.trianglehead.2.counterclockwise")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.mint.opacity(0.7))
+            .rotationEffect(.degrees(rotation))
+            .onAppear {
+                withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+            }
+    }
+}
+
+// MARK: - Menu bar content (unchanged)
 
 struct MenuBarContentView: View {
     var model: AppModel

@@ -3,11 +3,30 @@ import Foundation
 import Observation
 import VibeIslandCore
 
+enum NotchStatus: Equatable {
+    case closed
+    case opened
+    case popping
+}
+
+enum NotchOpenReason: Equatable {
+    case click
+    case hover
+    case notification
+    case boot
+}
+
+enum NotchContentType: Equatable {
+    case sessions
+    case menu
+}
+
 @MainActor
 @Observable
 final class AppModel {
     private static let overlayDisplayPreferenceDefaultsKey = "overlay.display.preference"
     private static let liveSessionStalenessWindow: TimeInterval = 15 * 60
+    static let hoverOpenDelay: TimeInterval = 1.0
 
     struct AcceptanceStep: Identifiable {
         let id: String
@@ -18,7 +37,10 @@ final class AppModel {
 
     var state = SessionState()
     var selectedSessionID: String?
-    var isOverlayVisible = false
+    var notchStatus: NotchStatus = .closed
+    var notchOpenReason: NotchOpenReason?
+    var notchContentType: NotchContentType = .sessions
+    var isOverlayVisible: Bool { notchStatus != .closed }
     var isCodexSetupBusy = false
     var isBridgeReady = false
     var lastActionMessage = "Waiting for Codex hook events..."
@@ -239,6 +261,8 @@ final class AppModel {
         refreshCodexHookStatus()
         refreshCodexRolloutTracking()
         refreshOverlayDisplayConfiguration()
+        ensureOverlayPanel()
+        performBootAnimation()
 
         do {
             try bridgeServer.start()
@@ -284,30 +308,62 @@ final class AppModel {
     }
 
     func toggleOverlay() {
-        if isOverlayVisible {
-            hideOverlay()
+        if notchStatus == .closed {
+            notchOpen(reason: .click)
         } else {
-            showOverlay()
+            notchClose()
         }
     }
 
-    func showOverlay() {
+    func notchOpen(reason: NotchOpenReason) {
+        notchOpenReason = reason
+        notchStatus = .opened
+
         overlayPlacementDiagnostics = overlayPanelController.show(
             model: self,
             preferredScreenID: preferredOverlayScreenID
         )
-        isOverlayVisible = overlayPanelController.isVisible
+        overlayPanelController.setInteractive(true)
 
         if let overlayPlacementDiagnostics {
             lastActionMessage = "Overlay showing on \(overlayPlacementDiagnostics.targetScreenName) as \(overlayPlacementDiagnostics.modeDescription.lowercased())."
         }
     }
 
-    func hideOverlay() {
-        overlayPanelController.hide()
-        isOverlayVisible = false
+    func notchClose() {
+        notchStatus = .closed
+        notchOpenReason = nil
+        overlayPanelController.setInteractive(false)
         refreshOverlayPlacement()
     }
+
+    func notchPop() {
+        guard notchStatus == .closed else { return }
+        notchStatus = .popping
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard self?.notchStatus == .popping else { return }
+            self?.notchStatus = .closed
+        }
+    }
+
+    func performBootAnimation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { return }
+            self.notchOpen(reason: .boot)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard self?.notchOpenReason == .boot else { return }
+                self?.notchClose()
+            }
+        }
+    }
+
+    func ensureOverlayPanel() {
+        overlayPanelController.ensurePanel(model: self, preferredScreenID: preferredOverlayScreenID)
+    }
+
+    // Legacy compatibility
+    func showOverlay() { notchOpen(reason: .click) }
+    func hideOverlay() { notchClose() }
 
     func refreshOverlayDisplayConfiguration() {
         overlayDisplayOptions = overlayPanelController.availableDisplayOptions()
@@ -511,6 +567,10 @@ final class AppModel {
 
         if updateLastActionMessage {
             lastActionMessage = describe(event)
+        }
+
+        if case .permissionRequested = event, notchStatus == .closed {
+            notchPop()
         }
     }
 
