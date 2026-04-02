@@ -6,7 +6,11 @@ The goal is to build a native Swift app that can monitor local agent sessions, s
 
 ## Status
 
-Bootstrap stage. The repository currently contains project direction, architecture notes, and repository conventions. App code has not been scaffolded yet.
+Initial native scaffold is in place. The repository now contains a buildable macOS Swift package with:
+
+- `VibeIslandCore` for shared event and session state logic
+- `VibeIslandApp` for the SwiftUI and AppKit shell
+- core tests for session state transitions
 
 ## Product Direction
 
@@ -22,8 +26,22 @@ Bootstrap stage. The repository currently contains project direction, architectu
 3. `v0.3` Terminal jump, multi-session state, and external display behavior.
 4. `v0.4` Multi-agent adapters and install/setup automation.
 
+## Getting Started
+
+```bash
+swift test
+swift build
+open Package.swift
+```
+
+Open the package in Xcode to run the macOS app target with the preview overlay and mock event stream.
+
 ## Repository Layout
 
+- `Package.swift` Swift package entry point for the app and shared core module.
+- `Sources/VibeIslandCore` Shared models, events, mock scenario, and session state reducer.
+- `Sources/VibeIslandApp` SwiftUI app shell, menu bar entry, and overlay panel controller.
+- `Tests/VibeIslandCoreTests` Core logic tests.
 - `docs/product.md` Product scope, MVP boundary, and roadmap.
 - `docs/architecture.md` System shape, event flow, and engineering decisions.
 
@@ -36,4 +54,4 @@ Bootstrap stage. The repository currently contains project direction, architectu
 
 ## Next Step
 
-Scaffold the macOS app target and a mock bridge so the UI can be built against realistic session events.
+Replace the in-process mock bridge with a real local event transport and wire the first CLI adapter end to end.

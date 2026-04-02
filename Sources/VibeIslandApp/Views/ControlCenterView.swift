@@ -1,0 +1,281 @@
+import SwiftUI
+import VibeIslandCore
+
+struct ControlCenterView: View {
+    var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 24) {
+            sessionColumn
+            detailColumn
+        }
+        .padding(24)
+        .frame(minWidth: 940, minHeight: 580)
+        .background(backgroundGradient)
+    }
+
+    private var sessionColumn: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Vibe Island OSS")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                Text("Native macOS scaffold for monitoring, approvals, and jump-back flows.")
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 12) {
+                summaryCard(title: "Running", value: model.state.runningCount, tint: .mint)
+                summaryCard(title: "Attention", value: model.state.attentionCount, tint: .orange)
+                summaryCard(title: "Completed", value: model.state.completedCount, tint: .blue)
+            }
+
+            HStack(spacing: 12) {
+                Button(model.isOverlayVisible ? "Hide Island" : "Show Island") {
+                    model.toggleOverlay()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Restart Demo") {
+                    model.resetDemo()
+                }
+                .buttonStyle(.bordered)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Sessions")
+                    .font(.headline)
+
+                ForEach(model.sessions) { session in
+                    Button {
+                        model.select(sessionID: session.id)
+                    } label: {
+                        SessionRowView(
+                            session: session,
+                            isSelected: session.id == model.focusedSession?.id
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: 360, alignment: .topLeading)
+    }
+
+    private var detailColumn: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if let session = model.focusedSession {
+                Text(session.tool.displayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(session.title)
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                Text(session.summary)
+                    .font(.title3)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 12) {
+                    detailPill(title: session.phase.displayName)
+                    if let jumpTarget = session.jumpTarget {
+                        detailPill(title: "\(jumpTarget.terminalApp) · \(jumpTarget.workspaceName)")
+                    }
+                    Text(session.updatedAt, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let request = session.permissionRequest {
+                    actionCard(title: request.title, subtitle: request.affectedPath) {
+                        Text(request.summary)
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 12) {
+                            Button(request.secondaryActionTitle) {
+                                model.approveFocusedPermission(false)
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(request.primaryActionTitle) {
+                                model.approveFocusedPermission(true)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    }
+                } else if let prompt = session.questionPrompt {
+                    actionCard(title: "Question", subtitle: "Reply from the island") {
+                        Text(prompt.title)
+                            .foregroundStyle(.secondary)
+
+                        HStack(spacing: 12) {
+                            ForEach(prompt.options, id: \.self) { option in
+                                Button(option) {
+                                    model.answerFocusedQuestion(option)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                } else {
+                    actionCard(title: "Next step", subtitle: "Terminal jump placeholder") {
+                        Text("Terminal focus restoration is not wired yet, but the model already tracks the target pane.")
+                            .foregroundStyle(.secondary)
+
+                        Button("Jump to Session") {
+                            model.jumpToFocusedSession()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            } else {
+                Text("No session selected")
+                    .font(.title2)
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Last action")
+                    .font(.headline)
+                Text(model.lastActionMessage)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(.white.opacity(0.08))
+        )
+    }
+
+    private func summaryCard(title: String, value: Int, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.system(size: 26, weight: .semibold, design: .rounded))
+            Capsule()
+                .fill(tint.gradient)
+                .frame(width: 42, height: 6)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(.white.opacity(0.08))
+        )
+    }
+
+    private func detailPill(title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private func actionCard<Content: View>(
+        title: String,
+        subtitle: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.headline)
+            Text(subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            content()
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(.white.opacity(0.08))
+        )
+    }
+
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.08, green: 0.10, blue: 0.16),
+                Color(red: 0.07, green: 0.16, blue: 0.19),
+                Color(red: 0.14, green: 0.12, blue: 0.10),
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+}
+
+private struct SessionRowView: View {
+    let session: AgentSession
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 10, height: 10)
+                .padding(.top, 6)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(session.title)
+                        .font(.headline)
+                    Spacer(minLength: 12)
+                    Text(session.tool.shortName)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(session.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                HStack {
+                    Text(session.phase.displayName)
+                    Text("·")
+                    Text(session.updatedAt, style: .relative)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(isSelected ? .white.opacity(0.18) : .white.opacity(0.06))
+        )
+    }
+
+    private var statusColor: Color {
+        switch session.phase {
+        case .running:
+            .mint
+        case .waitingForApproval:
+            .orange
+        case .waitingForAnswer:
+            .yellow
+        case .completed:
+            .blue
+        }
+    }
+}
