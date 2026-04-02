@@ -202,18 +202,10 @@ struct MenuBarContentView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button("Load Demo Acceptance") {
-                model.startAcceptanceDemo()
-            }
-
             Divider()
 
             Button(model.isOverlayVisible ? "Hide Island Overlay" : "Show Island Overlay") {
                 model.toggleOverlay()
-            }
-
-            Button("Load Demo Sessions") {
-                model.resetDemo()
             }
 
             Divider()

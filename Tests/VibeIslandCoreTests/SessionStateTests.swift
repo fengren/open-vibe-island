@@ -106,24 +106,24 @@ struct SessionStateTests {
     }
 
     @Test
-    func preservesSessionOriginFromStartEvent() {
+    func preservesLiveSessionOriginFromStartEvent() {
         var state = SessionState()
 
         state.apply(
             .sessionStarted(
                 SessionStarted(
-                    sessionID: "demo-session-1",
-                    title: "Demo session",
+                    sessionID: "live-session-1",
+                    title: "Live session",
                     tool: .codex,
-                    origin: .demo,
-                    summary: "Demo data",
+                    origin: .live,
+                    summary: "Live data",
                     timestamp: .now
                 )
             )
         )
 
-        #expect(state.session(id: "demo-session-1")?.origin == .demo)
-        #expect(state.session(id: "demo-session-1")?.isDemoSession == true)
+        #expect(state.session(id: "live-session-1")?.origin == .live)
+        #expect(state.session(id: "live-session-1")?.isDemoSession == false)
     }
 
     @Test
@@ -147,33 +147,6 @@ struct SessionStateTests {
 
         #expect(decoded == [envelope])
         #expect(buffer.isEmpty)
-    }
-
-    @Test
-    func localBridgeAcceptsResetDemoCommand() async throws {
-        let socketURL = BridgeSocketLocation.uniqueTestURL()
-        let server = DemoBridgeServer(socketURL: socketURL)
-        try server.start()
-        defer { server.stop() }
-
-        let client = LocalBridgeClient(socketURL: socketURL)
-        let stream = try client.connect()
-        defer { client.disconnect() }
-        try await client.send(.registerClient(role: .observer))
-
-        var iterator = stream.makeAsyncIterator()
-
-        try await client.send(.resetDemo)
-
-        let resetFirstEvent = try await nextEvent(from: &iterator)
-        let resetSecondEvent = try await nextEvent(from: &iterator)
-        let resetThirdEvent = try await nextEvent(from: &iterator)
-        let resetBatch = [resetFirstEvent, resetSecondEvent, resetThirdEvent]
-
-        #expect(resetBatch.count == 3)
-        #expect(resetBatch[0].isSessionStarted)
-        #expect(resetBatch[1].isSessionStarted)
-        #expect(resetBatch[2].isSessionStarted)
     }
 
     @Test

@@ -81,8 +81,16 @@ public struct CodexTrackedSessionRecord: Equatable, Codable, Sendable {
 
 public extension CodexTrackedSessionRecord {
     var shouldRestoreToLiveState: Bool {
-        origin != .demo && !MockAgentScenario.sessionIDs.contains(sessionID)
+        origin != .demo && !LegacyMockSessionIDs.all.contains(sessionID)
     }
+}
+
+private enum LegacyMockSessionIDs {
+    static let all: Set<String> = [
+        "claude-fix-auth-bug",
+        "codex-backend-server",
+        "gemini-optimize-queries",
+    ]
 }
 
 public final class CodexSessionStore: @unchecked Sendable {

@@ -35,11 +35,6 @@ struct ControlCenterView: View {
                         model.toggleOverlay()
                     }
                     .buttonStyle(.borderedProminent)
-
-                    Button("Load Demo Sessions") {
-                        model.resetDemo()
-                    }
-                    .buttonStyle(.bordered)
                 }
 
                 acceptanceCard
@@ -174,11 +169,6 @@ struct ControlCenterView: View {
                     model.refreshCodexHookStatus()
                 }
                 .buttonStyle(.bordered)
-
-                Button("Load Demo Acceptance") {
-                    model.startAcceptanceDemo()
-                }
-                .buttonStyle(.borderedProminent)
 
                 Button("Open Overlay") {
                     if !model.isOverlayVisible {

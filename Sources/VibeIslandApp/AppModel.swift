@@ -233,10 +233,6 @@ final class AppModel {
         }
     }
 
-    func resetDemo() {
-        send(.resetDemo, userMessage: "Loading demo sessions into the diagnostic view.")
-    }
-
     func select(sessionID: String) {
         selectedSessionID = sessionID
     }
@@ -328,14 +324,6 @@ final class AppModel {
         updateCodexHooks(userMessage: "Removing Codex hooks.") { manager in
             try manager.uninstall()
         }
-    }
-
-    func startAcceptanceDemo() {
-        if !isOverlayVisible {
-            toggleOverlay()
-        }
-        resetDemo()
-        lastActionMessage = "Demo acceptance loaded. The overlay is visible and the diagnostic timeline was reset."
     }
 
     private func send(_ command: BridgeCommand, userMessage: String) {
@@ -463,9 +451,6 @@ final class AppModel {
     private func describe(_ event: AgentEvent) -> String {
         switch event {
         case let .sessionStarted(payload):
-            if payload.origin == .demo {
-                return "Demo session started: \(payload.title)"
-            }
             return "Session started: \(payload.title)"
         case let .activityUpdated(payload):
             return payload.summary

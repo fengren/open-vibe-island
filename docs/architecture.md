@@ -63,9 +63,8 @@ The current Codex slice is now two-stage:
 
 1. Define the shared event schema
 2. Keep Codex terminal entry unchanged and attach through hooks
-3. Use the mock publisher only as a fallback/demo mode
-4. Harden the approval loop for `PreToolUse`
-5. Add install automation and terminal focus restoration
+3. Harden the approval loop for `PreToolUse`
+4. Add install automation and terminal focus restoration
 
 ## Open Questions
 
@@ -79,4 +78,4 @@ The current Codex slice is now two-stage:
 - Preserve a clean separation between UI state and transport concerns.
 - Version the event schema early so adapters can evolve safely.
 - Keep setup reversible when editing third-party tool config files.
-- Add mock fixtures for every event type before wiring real integrations.
+- Keep the runtime surface bound to real agent state rather than shipping UI-level demo toggles.

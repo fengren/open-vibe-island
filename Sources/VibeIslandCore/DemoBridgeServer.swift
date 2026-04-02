@@ -236,26 +236,6 @@ public final class DemoBridgeServer: @unchecked Sendable {
         }
     }
 
-    private func resetDemo(broadcastToAllClients: Bool) {
-        scheduledItems.forEach { $0.cancel() }
-        scheduledItems.removeAll()
-
-        pendingApprovals.values.forEach { $0.timeoutItem.cancel() }
-        pendingApprovals.removeAll()
-
-        state = SessionState()
-        let initialEvents = MockAgentScenario.initialEvents
-        initialEvents.forEach { state.apply($0) }
-
-        if broadcastToAllClients {
-            broadcast(initialEvents.map(BridgeEnvelope.event))
-        }
-
-        for scheduled in MockAgentScenario.timeline(referenceDate: .now) {
-            schedule(event: scheduled.event, after: scheduled.delay)
-        }
-    }
-
     private func handle(_ command: BridgeCommand, from clientID: UUID) {
         switch command {
         case let .registerClient(role):
@@ -265,10 +245,6 @@ public final class DemoBridgeServer: @unchecked Sendable {
 
             client.role = role
             clients[clientID] = client
-            send(.response(.acknowledged), to: clientID)
-
-        case .resetDemo:
-            resetDemo(broadcastToAllClients: true)
             send(.response(.acknowledged), to: clientID)
 
         case let .resolvePermission(sessionID, approved):

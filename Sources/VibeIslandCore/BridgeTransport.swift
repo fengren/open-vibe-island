@@ -64,7 +64,6 @@ public enum BridgeClientRole: String, Codable, Sendable {
 
 public enum BridgeCommand: Equatable, Codable, Sendable {
     case registerClient(role: BridgeClientRole)
-    case resetDemo
     case resolvePermission(sessionID: String, approved: Bool)
     case answerQuestion(sessionID: String, answer: String)
     case processCodexHook(CodexHookPayload)
@@ -80,7 +79,6 @@ public enum BridgeCommand: Equatable, Codable, Sendable {
 
     private enum CommandType: String, Codable {
         case registerClient
-        case resetDemo
         case resolvePermission
         case answerQuestion
         case processCodexHook
@@ -93,8 +91,6 @@ public enum BridgeCommand: Equatable, Codable, Sendable {
         switch type {
         case .registerClient:
             self = .registerClient(role: try container.decode(BridgeClientRole.self, forKey: .role))
-        case .resetDemo:
-            self = .resetDemo
         case .resolvePermission:
             self = .resolvePermission(
                 sessionID: try container.decode(String.self, forKey: .sessionID),
@@ -117,8 +113,6 @@ public enum BridgeCommand: Equatable, Codable, Sendable {
         case let .registerClient(role):
             try container.encode(CommandType.registerClient, forKey: .type)
             try container.encode(role, forKey: .role)
-        case .resetDemo:
-            try container.encode(CommandType.resetDemo, forKey: .type)
         case let .resolvePermission(sessionID, approved):
             try container.encode(CommandType.resolvePermission, forKey: .type)
             try container.encode(sessionID, forKey: .sessionID)
