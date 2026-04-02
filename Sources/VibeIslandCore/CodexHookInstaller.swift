@@ -79,7 +79,7 @@ public enum CodexHookInstaller {
 
         for spec in eventSpecs {
             let existingGroups = hooksObject[spec.name] as? [Any] ?? []
-            let cleanedGroups = sanitize(groups: existingGroups, managedCommand: hookCommand)
+            let cleanedGroups = sanitizeForInstall(groups: existingGroups, replacingCommand: hookCommand)
             hooksObject[spec.name] = cleanedGroups + [managedGroup(matcher: spec.matcher, hookCommand: hookCommand)]
         }
 
@@ -238,6 +238,30 @@ public enum CodexHookInstaller {
         }
     }
 
+    private static func sanitizeForInstall(groups: [Any], replacingCommand: String) -> [[String: Any]] {
+        groups.compactMap { item in
+            guard var group = item as? [String: Any] else {
+                return nil
+            }
+
+            let existingHooks = group["hooks"] as? [Any] ?? []
+            let filteredHooks = existingHooks.compactMap { hook -> [String: Any]? in
+                guard let hook = hook as? [String: Any] else {
+                    return nil
+                }
+
+                return isManagedHookForInstall(hook, replacingCommand: replacingCommand) ? nil : hook
+            }
+
+            guard !filteredHooks.isEmpty else {
+                return nil
+            }
+
+            group["hooks"] = filteredHooks
+            return group
+        }
+    }
+
     private static func containsManagedHook(in groups: [Any], managedCommand: String?) -> Bool {
         groups.contains { item in
             guard let group = item as? [String: Any],
@@ -281,6 +305,27 @@ public enum CodexHookInstaller {
         }
 
         return hook["command"] as? String == managedCommand
+    }
+
+    private static func isManagedHookForInstall(_ hook: [String: Any], replacingCommand: String) -> Bool {
+        if isManagedHook(hook, managedCommand: replacingCommand) {
+            return true
+        }
+
+        guard let command = hook["command"] as? String else {
+            return false
+        }
+
+        return isLegacyVibeIslandHookCommand(command)
+    }
+
+    private static func isLegacyVibeIslandHookCommand(_ command: String) -> Bool {
+        let normalized = command.lowercased()
+        if normalized.contains("vibeislandhooks") {
+            return true
+        }
+
+        return normalized.contains("vibe-island-bridge")
     }
 
     private static func sectionRange(named section: String, lines: [String]) -> Range<Int>? {

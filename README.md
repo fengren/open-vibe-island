@@ -94,6 +94,7 @@ The installer:
 
 - enables `[features].codex_hooks = true` if needed
 - merges Vibe Island hook handlers into `~/.codex/hooks.json` without deleting unrelated hooks
+- replaces older Vibe Island hook commands so Codex does not run duplicate Vibe Island hooks for the same event
 - writes a small manifest so uninstall can remove only what Vibe Island added
 - creates timestamped backups before rewriting `config.toml` or `hooks.json`
 

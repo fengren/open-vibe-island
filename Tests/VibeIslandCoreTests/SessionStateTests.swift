@@ -324,6 +324,54 @@ struct SessionStateTests {
     }
 
     @Test
+    func codexHookInstallerInstallReplacesLegacyVibeIslandCommands() throws {
+        let existing = """
+        {
+          "hooks": {
+            "Stop": [
+              {
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "'/Users/test/.vibe-island/bin/vibe-island-bridge' --source codex"
+                  },
+                  {
+                    "type": "command",
+                    "command": "'/tmp/old-debug/VibeIslandHooks'"
+                  },
+                  {
+                    "type": "command",
+                    "command": "/usr/bin/true"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        """.data(using: .utf8)
+
+        let mutation = try CodexHookInstaller.installHooksJSON(
+            existingData: existing,
+            hookCommand: "'/tmp/new-release/VibeIslandHooks'"
+        )
+
+        #expect(mutation.changed)
+
+        let root = try jsonObject(from: mutation.contents)
+        let hooks = root["hooks"] as? [String: Any]
+        let stopGroups = hooks?["Stop"] as? [[String: Any]]
+        let stopCommands = stopGroups?
+            .compactMap { $0["hooks"] as? [[String: Any]] }
+            .flatMap { $0 }
+            .compactMap { $0["command"] as? String } ?? []
+
+        #expect(stopCommands.contains("/usr/bin/true"))
+        #expect(stopCommands.contains("'/tmp/new-release/VibeIslandHooks'"))
+        #expect(!stopCommands.contains("'/Users/test/.vibe-island/bin/vibe-island-bridge' --source codex"))
+        #expect(!stopCommands.contains("'/tmp/old-debug/VibeIslandHooks'"))
+    }
+
+    @Test
     func codexHookInstallerUninstallRemovesOnlyManagedHooks() throws {
         let existing = """
         {
